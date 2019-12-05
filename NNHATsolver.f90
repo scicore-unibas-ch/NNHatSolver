@@ -1,4 +1,4 @@
-program NNHATsolver
+program model
 
   implicit none
 
@@ -14,15 +14,9 @@ program NNHATsolver
   
   logical,parameter::rk2=.false.             !Runge-Kutta 2nd order
   logical,parameter::rk4=.false.             !Runge-Kutta 4th order
-  logical,parameter::debug=.true.           !Set debug mode (only 1 parameter)
-  !If debug mode is true, the code expects two files:
-  !initialCondition_debug.txt and varyingParameters_debug.txt
-  !From these files only the first one will be calculated.
-  !Otherwise, if debug is false, the code expects the regular files:
-  !initialCondition.txt and varyingParameters.txt
-  !from which all lines (maxnmodels) will be calculated.
-
-  !Depends on CI
+  logical,parameter::debug=.true.           !Set debug mode
+  !If debug mode is true, the code will generate evolution.d and conservation.d
+  !As it writes to hard disk every iteration, debug is considerably slower.
 
   double precision,parameter:: deltatimeini=1.d-7       !In yr
   double precision,parameter:: maxtimestep=0.01d0       !In yr
@@ -37,8 +31,8 @@ program NNHATsolver
                                                         !theta = 0 (1st order explicit)
 
 
+  !Fixed parameters of HAT models
   double precision,parameter:: daysInYear = 365.d0
-
   double precision,parameter:: alpha = 0.2d0*daysInYear  !73.d0
   double precision,parameter:: b = 0.8d0
   double precision,parameter:: betaal = 0.0014d0 * daysInYear * 4000.d0 !2044.d0
@@ -65,28 +59,23 @@ program NNHATsolver
   double precision,parameter:: xi = 0.62d0
   
 
-  
-  double precision,dimension(nvariables)::y,fvar,fvar1,fvar2,fvar3,fvar4,y1,y2,y3!,calc,ref,error
+  double precision,dimension(nvariables)::y,fvar,fvar1,fvar2,fvar3,fvar4,y1,y2,y3
 
   double precision:: a,add
   double precision:: deltatime,time,dtmin,N2N1,VH1,VH2,r1h,r1l,r2h,r2l,ch,mugamma
   double precision:: Nl,Nh,Nal,Nah
-  double precision:: Nlc,Nhc,Nalc,Nahc
   double precision:: Nh0,Nh10,Nh20,Nv10,Nv20
   double precision:: coef1,coef2,rPD_stg2
   double precision:: cumI1Lt,cumI1Ht,cumI2Lt,cumI2Ht
   double precision,dimension(ndata)::screened_as,pop_as,rate_as,screened_pd,pop_pd,slope,rPD_stg1
 
-  character number*5,admy*1
+  character number*5
 
   !After 100 yrs, r1l,r2l,r1h will change.
   !r1h is an annual vector/function (<20 yr)
   !r1l=r1h+raS (ras=value for 1st month and 0 for the rest 11 every year)
   !r2l=r2h+raS (r2h is fixed to the initial value)
   !Add cumulators after 100 yr
-  !lsoda 1st part (tol=1.d-6)
-  !ode45 2nd part (Dorman-Prince)
-  !1 data every month.
   !raS (depends on data and epsilon,N2N1=Nh/Nl fixed value)
   !implement initialization denpending pretty much on N2N1,VH1,VH2
   !Nh0=10000 fixed
@@ -121,6 +110,7 @@ program NNHATsolver
   !23-Sah, 24-Eah, 26-Iah, 25-Rah
   ! 4-Svl,  3-Evl,  1-Ivl,  7-Uvl
   ! 5-Svh,  6-Evh,  2-Ivh,  8-Uvh
+
 
   global: do modelnum=1,nmodels
 
@@ -175,8 +165,10 @@ program NNHATsolver
      write(number,'(I5.5)') modelnum
      open(12,file='steadystate'//number//'.d')
 
+ !********* PHASE I *********
      loop1: do iter=1,maxiter
-        
+
+        !Solve ODEs
         if(rk2) then
            call solver(r1h,r1l,r2h,r2l,ch,mugamma,Nv10,Nv20,Nl,Nh,Nal,Nah,1.d0,y,fvar1,deltatime)
            y1(:)=y(:)+fvar1(:)
@@ -199,15 +191,11 @@ program NNHATsolver
         dtmin=1.d60
         iselect=0
         var1: do i=1,nvariables
-!           if(abs(fvar(i)).le.1.d0.or.abs(y(i)).le.1.d0) cycle var1
-!           if (abs(dkt*y(i)/fvar(i)*deltatime).lt.dtmin) iselect=i
            if(y(i).ne.0.d0.and.fvar(i).ne.0.d0)dtmin=min(dtmin,abs(dkt1*y(i)/fvar(i)*deltatime))
         enddo var1
 
         deltatime=min(dtmin,factor*deltatime,maxtimestep)
         
-!        deltatime=dtmin
-
         !Update variables and time
         y(:)=y(:)+fvar(:)
         time=time+deltatime
@@ -215,8 +203,10 @@ program NNHATsolver
         Nh=y(16)+y(17)+y(14)+y(15)
         Nal=y(19)+y(21)+y(22)+y(20)
         Nah=y(23)+y(24)+y(26)+y(25)
-        !Write conservation
+
+
         if(debug) then
+           !Write conservation
            write(10,'(7(1x,es18.11),1x,i3,1x,es18.11)') time,deltatime,dtmin,Nl,Nh,Nal,Nah,iselect,y(12)
 
            !10-Sl,  13-El,  11-I1l, 12-I2l,  9-Tl
@@ -236,16 +226,12 @@ program NNHATsolver
         
      enddo loop1
 
-!     print *,'After loop1:'
-!     write(*,'(27(1x,es18.11))') time,y(10),y(13),y(11),y(12),y(9),y(16),&
-!                &    y(17),y(14),y(15),y(18),y(19),y(21),y(22),y(20),y(23),y(24),&
-!                &    y(26),y(25),y(4),y(3),y(1),y(7),y(5),y(6),y(2),y(8)
 
-!****************************************************
-     !Second Phase of the dynamics
-
+ !********* PHASE II *********
      coef1 = 4.614399d0
      coef2 = 0.001796526d0
+
+     !Input data for human intervention
      open(1,file='data_AS.txt')
      open(2,file='data_PD.txt')
      read(1,*) !Header
@@ -263,14 +249,22 @@ program NNHATsolver
      rPD_stg1(:) = coef1*slope(:)
      rPD_stg2 = coef2*slope(1)
 
+     !Initial timestep for Phase II
      deltatime=1.d-4
+
+     !Accumulators for Phase II
      cumI1Lt=0.d0
      cumI1Ht=0.d0
      cumI2Lt=0.d0
-     cumI2Ht=0.d0     
+     cumI2Ht=0.d0
+
+     
      loop2: do iter=1,maxiter
-!        deltatime=1.d-4
+
+        !Human intervention at the beginning of every year after Phase I
         index=int(floor(time-dble(maxtime1)))+1
+        
+        !Only during the first month of every year of Phase II
         if(time-floor(time).gt.month) then
            add=0.d0
         else
@@ -281,8 +275,7 @@ program NNHATsolver
         r1l=rPD_stg1(index)+add
         r2l=rPD_stg2+add
 
-!        print '(i2,4(1x,es12.5))',index, r1l,rPD_stg1(index),add,rPD_stg2
-
+        !Solve ODEs
         if(rk2) then
            call solver(r1h,r1l,r2h,r2l,ch,mugamma,Nv10,Nv20,Nl,Nh,Nal,Nah,1.d0,y,fvar1,deltatime)
            y1(:)=y(:)+fvar1(:)
@@ -305,8 +298,6 @@ program NNHATsolver
         dtmin=1.d60
         iselect=0
         var2: do i=1,nvariables
-!           if(abs(fvar(i)).le.1.d0.or.abs(y(i)).le.1.d0) cycle var2
-!           if (abs(dkt*y(i)/fvar(i)*deltatime).lt.dtmin) iselect=i
            if(y(i).ne.0.d0.and.fvar(i).ne.0.d0)dtmin=min(dtmin,abs(dkt2*y(i)/fvar(i)*deltatime))
         enddo var2
 
@@ -319,6 +310,7 @@ program NNHATsolver
         Nh=y(16)+y(17)+y(14)+y(15)
         Nal=y(19)+y(21)+y(22)+y(20)
         Nah=y(23)+y(24)+y(26)+y(25)
+
         !10-Sl,  13-El,  11-I1l, 12-I2l,  9-Tl
         !16-Sh,  17-Eh,  14-I1h, 15-I2h, 18-Th
         !19-Sal, 21-Eal, 22-Ial, 20-Ral
@@ -326,13 +318,13 @@ program NNHATsolver
         ! 4-Svl,  3-Evl,  1-Ivl,  7-Uvl
         ! 5-Svh,  6-Evh,  2-Ivh,  8-Uvh       
 
-
         !Accumulators
-        ! ## cumulative nb of infected people by stage and setting
+        !Cumulative number of infected people by stage and setting
         cumI1Lt=cumI1Lt+eta*y(13)*deltatime
         cumI2Lt=cumI2Lt+gamma*y(11)*deltatime
         cumI1Ht=cumI1Ht+eta*y(17)*deltatime
         cumI2Ht=cumI2Ht+gamma*y(14)*deltatime
+
 !#
 !# ## Store cummulative number of reported cases by stage and by setting
 !# cumCasesPassive1t.L <- r_a * I_1L
@@ -343,10 +335,9 @@ program NNHATsolver
 !# cumCasesActive1t <- r_AS *I_1L
 !# cumCasesActive2t <- r_AS *I_2L
         
-
         
-        !Write conservation
         if(debug) then
+           !Write conservation
            write(10,'(7(1x,es18.11),1x,i3,1x,es18.11)') time,deltatime,dtmin,Nl,Nh,Nal,Nah,iselect,y(12)
 
            !Write evolution
@@ -378,26 +369,19 @@ program NNHATsolver
      endif
   
   enddo global
-!  print *,'After loop2:'
-!  write(*,'(27(1x,es18.11))') time,y(10),y(13),y(11),y(12),y(9),y(16),&
-!                &    y(17),y(14),y(15),y(18),y(19),y(21),y(22),y(20),y(23),y(24),&
-!                &    y(26),y(25),y(4),y(3),y(1),y(7),y(5),y(6),y(2),y(8)
   close(2)
   close(12)
 
 
-end program NNHATsolver
+end program model
 
 
-
-!subroutine solver(nparam,nvariables,inputparam,theta,y,fvar,deltatime)
 subroutine solver(r1h,r1l,r2h,r2l,ch,mugamma,Nv10,Nv20,Nl,Nh,Nal,Nah,theta,y,fvar,deltatime)
 
   implicit none
 
   integer i,j
   integer,parameter:: nvar = 26
-  integer,parameter:: inputparam_dim=6
   integer,parameter:: ndiagsup=3,ndiaginf=4,leftbox=6
 
   double precision,intent(in):: r1h,r1l,r2h,r2l,ch,mugamma,Nv10,Nv20,Nl,Nh,Nal,Nah
@@ -475,7 +459,8 @@ subroutine solver(r1h,r1l,r2h,r2l,ch,mugamma,Nv10,Nv20,Nl,Nh,Nal,Nah,theta,y,fva
 
   biglambdaL = wll*(c1*y(11) + c2*y(12)) + wlh*(c1*y(14) + c2*y(15)) + wal*y(22)
   biglambdaH = whh*(c1*y(14) + c2*y(15)) + wah*y(26)
-  !Variables number
+
+  
   !10-Sl,  13-El,  11-I1l, 12-I2l,  9-Tl
   !16-Sh,  17-Eh,  14-I1h, 15-I2h, 18-Th
   !19-Sal, 21-Eal, 22-Ial, 20-Ral
@@ -483,8 +468,8 @@ subroutine solver(r1h,r1l,r2h,r2l,ch,mugamma,Nv10,Nv20,Nl,Nh,Nal,Nah,theta,y,fva
   ! 4-Svl,  3-Evl,  1-Ivl,  7-Uvl
   ! 5-Svh,  6-Evh,  2-Ivh,  8-Uvh
 
-  !Timestep
-  
+
+  !Independent vector
   fvar(1) = nu*y(3) - muv*y(1)
   fvar(2) = nu*y(6) - muv*y(2)
   fvar(3) = biglambdaL*y(4) - (muv + nu)*y(3)
@@ -511,53 +496,21 @@ subroutine solver(r1h,r1l,r2h,r2l,ch,mugamma,Nv10,Nv20,Nl,Nh,Nal,Nah,theta,y,fva
   fvar(24) = lambdaah*y(2)*y(23) - (muah + eta)*y(24)
   fvar(25) = gammaah*y(26) - (muah + deltaa)*y(25)
   fvar(26) = eta*y(24) - (muah + gammaah)*y(26)
-  !10-Sl,  13-El,  11-I1l, 12-I2l,  9-Tl
-  !16-Sh,  17-Eh,  14-I1h, 15-I2h, 18-Th
-  !19-Sal, 21-Eal, 22-Ial, 20-Ral
-  !23-Sah, 24-Eah, 26-Iah, 25-Rah
-  ! 4-Svl,  3-Evl,  1-Ivl,  7-Uvl
-  ! 5-Svh,  6-Evh,  2-Ivh,  8-Uvh
-
-!!$  print *,1,fvar(10)
-!!$  print *,2,fvar(13)
-!!$  print *,3,fvar(11)
-!!$  print *,4,fvar(12)
-!!$  print *,5,fvar(9)
-!!$  print *,6,fvar(16)
-!!$  print *,7,fvar(17)
-!!$  print *,8,fvar(14)
-!!$  print *,9,fvar(15)
-!!$  print *,10,fvar(18)
-!!$  print *,11,fvar(19)
-!!$  print *,12,fvar(21)
-!!$  print *,13,fvar(22)
-!!$  print *,14,fvar(20)
-!!$  print *,15,fvar(23)
-!!$  print *,16,fvar(24)
-!!$  print *,17,fvar(26)
-!!$  print *,18,fvar(25)
-!!$  print *,19,fvar(4)
-!!$  print *,20,fvar(3)
-!!$  print *,21,fvar(1)
-!!$  print *,22,fvar(7)
-!!$  print *,23,fvar(5)
-!!$  print *,24,fvar(6)
-!!$  print *,25,fvar(2)
-!!$  print *,26,fvar(8)
-!!$
-!!$  stop
-
+ 
   !+1 terms in diagonal will be included later
-  !so that we can multiply the whole matrix by deltatime efficiently.  
+  !so that we can multiply the whole matrix by deltatime efficiently.
+
+  !Jacobian initialization
   phi(:,:)=0.d0
 
-
   !10-Sl,  13-El,  11-I1l, 12-I2l,  9-Tl
   !16-Sh,  17-Eh,  14-I1h, 15-I2h, 18-Th
   !19-Sal, 21-Eal, 22-Ial, 20-Ral
   !23-Sah, 24-Eah, 26-Iah, 25-Rah
   ! 4-Svl,  3-Evl,  1-Ivl,  7-Uvl
   ! 5-Svh,  6-Evh,  2-Ivh,  8-Uvh
+
+  !Jacobian elements
   phi(1,1) = muv
   phi(1,3) = -nu
   phi(2,2) = muv
@@ -646,15 +599,13 @@ subroutine solver(r1h,r1l,r2h,r2l,ch,mugamma,Nv10,Nv20,Nl,Nh,Nal,Nah,theta,y,fva
   !Timestep inclussion
   phi=phi*deltatime*theta
 
-!  !Diagonal terms +1 due to self-derivative
+  !Diagonal terms +1 due to self-derivative
   do i=1,nvar
      phi(i,i)=1.d0-phi(i,i)
   enddo
 
   
   !Normalization of the rows in the Jacobian
-  !Inclusion of timestep
-!  norm(:)=1.d0
   do i=1,nvar
      norm(i)=abs(phi(i,1))
      do j=1,nvar
@@ -670,20 +621,12 @@ subroutine solver(r1h,r1l,r2h,r2l,ch,mugamma,Nv10,Nv20,Nl,Nh,Nal,Nah,theta,y,fva
 
   !Additional column in Jacobian to pass independent variables vector to solver.
   phi(:,27) = fvar(:)
-!  print *,fvar
-!  print *,''
 
+  !Sparse matrix solver. Returns solution in fvar
   call eigen(nvar,ndiagsup,ndiaginf,leftbox,phi,fvar,fvar)
 
-  !Calculate new deltatime
-  
-!  print *,fvar
-!  print *,''
-!  print *,y
-!  print *,''
-!  print *,fvar
-
 end subroutine solver
+
 
 ! *******************************************************************           
     subroutine eigen(nisp,nds,ndi,ijd,phi,c,x)
