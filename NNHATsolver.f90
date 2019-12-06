@@ -30,35 +30,12 @@ program model
                                                         !theta = 0.5 (2nd order)
                                                         !theta = 0 (1st order explicit)
 
-
   !Fixed parameters of HAT models
   double precision,parameter:: daysInYear = 365.d0
-  double precision,parameter:: alpha = 0.2d0*daysInYear  !73.d0
-  double precision,parameter:: b = 0.8d0
-  double precision,parameter:: betaal = 0.0014d0 * daysInYear * 4000.d0 !2044.d0
-  double precision,parameter:: betaah = 0.0014d0 * daysInYear * 4000.d0 !2044.d0
-  double precision,parameter:: cal = 0.d0
-  double precision,parameter:: cah = 0.d0
-  double precision,parameter:: delta = 0.006d0 * daysInYear !2.19d0
-  double precision,parameter:: deltaa = 0.003d0 * daysInYear !1.095d0
   double precision,parameter:: eta = 0.085d0 * daysInYear !31.025d0
   double precision,parameter:: epsilon = 0.7d0 
-  double precision,parameter:: f = 0.333d0 * daysInYear !121.545d0
   double precision,parameter:: gamma = 0.001d0 * daysInYear !0.365d0
-  double precision,parameter:: gammaah = 0.0019d0 * daysInYear !0.6935d0
-  double precision,parameter:: gammaal = 0.002d0 * daysInYear !0.73d0
-  double precision,parameter:: mu = 5.4795d0 * 1.d-5 * daysInYear !2.0000175d-2
-  double precision,parameter:: mual = 0.0014d0 *daysInYear !0.511d0
-  double precision,parameter:: muah = mual !0.511d0
-  double precision,parameter:: mut = 0.d0 * daysInYear !0.d0
-  double precision,parameter:: muv = 0.03d0 * daysInYear !10.95d0
-  double precision,parameter:: nu = 0.037d0 * daysInYear !13.505d0
-  double precision,parameter:: sigma = 0.4d0
-  double precision,parameter:: sigmaal = 0.3d0
-  double precision,parameter:: sigmaah = 0.3d0
-  double precision,parameter:: xi = 0.62d0
   
-
   double precision,dimension(nvariables)::y,fvar,fvar1,fvar2,fvar3,fvar4,y1,y2,y3
 
   double precision:: a,add
