@@ -14,7 +14,7 @@ program model
   
   logical,parameter::rk2=.false.             !Runge-Kutta 2nd order
   logical,parameter::rk4=.false.             !Runge-Kutta 4th order
-  logical,parameter::debug=.true.           !Set debug mode
+  logical,parameter::debug=.false.           !Set debug mode
   !If debug mode is true, the code will generate evolution.d and conservation.d
   !As it writes to hard disk every iteration, debug is considerably slower.
 
@@ -47,6 +47,7 @@ program model
   double precision,dimension(ndata)::screened_as,pop_as,rate_as,screened_pd,pop_pd,slope,rPD_stg1
 
   character number*5
+  logical output
 
   !After 100 yrs, r1l,r2l,r1h will change.
   !r1h is an annual vector/function (<20 yr)
@@ -73,12 +74,15 @@ program model
   else
      nmodels=maxnmodels
   endif
-
+  
   !Open conservation file
   if (debug) then
      open(10,file='conservation.d')
      open(11,file='evolution.d')
   endif
+
+  !Open accumulators file
+  open(12,file='accumulators.d')
   
   !Variables number
   !10-Sl,  13-El,  11-I1l, 12-I2l,  9-Tl
@@ -140,9 +144,17 @@ program model
      endif
 
      write(number,'(I5.5)') modelnum
-     open(12,file='steadystate'//number//'.d')
+     open(13,file='steadystate'//number//'.d')
 
- !********* PHASE I *********
+!********* PHASE I *********
+     
+     !Accumulators
+     cumI1Lt=0.d0
+     cumI1Ht=0.d0
+     cumI2Lt=0.d0
+     cumI2Ht=0.d0
+
+     
      loop1: do iter=1,maxiter
 
         !Solve ODEs
@@ -176,14 +188,20 @@ program model
         !Update variables and time
         y(:)=y(:)+fvar(:)
         time=time+deltatime
-        Nl=y(10)+y(13)+y(11)+y(12)
-        Nh=y(16)+y(17)+y(14)+y(15)
-        Nal=y(19)+y(21)+y(22)+y(20)
-        Nah=y(23)+y(24)+y(26)+y(25)
 
+        !Accumulators
+        !Cumulative number of infected people by stage and setting
+        cumI1Lt=cumI1Lt+eta*y(13)*deltatime
+        cumI2Lt=cumI2Lt+gamma*y(11)*deltatime
+        cumI1Ht=cumI1Ht+eta*y(17)*deltatime
+        cumI2Ht=cumI2Ht+gamma*y(14)*deltatime
 
         if(debug) then
            !Write conservation
+           Nl=y(10)+y(13)+y(11)+y(12)
+           Nh=y(16)+y(17)+y(14)+y(15)
+           Nal=y(19)+y(21)+y(22)+y(20)
+           Nah=y(23)+y(24)+y(26)+y(25)
            write(10,'(7(1x,es18.11),1x,i3,1x,es18.11)') time,deltatime,dtmin,Nl,Nh,Nal,Nah,iselect,y(12)
 
            !10-Sl,  13-El,  11-I1l, 12-I2l,  9-Tl
@@ -203,10 +221,13 @@ program model
         
      enddo loop1
 
+     write(12,'(5(1x,es18.11))') time,cumI1Lt,cumI1Ht,cumI2Lt,cumI2Ht
+
 
  !********* PHASE II *********
      coef1 = 4.614399d0
      coef2 = 0.001796526d0
+     output=.false.
 
      !Input data for human intervention
      open(1,file='data_AS.txt')
@@ -229,13 +250,6 @@ program model
      !Initial timestep for Phase II
      deltatime=1.d-4
 
-     !Accumulators for Phase II
-     cumI1Lt=0.d0
-     cumI1Ht=0.d0
-     cumI2Lt=0.d0
-     cumI2Ht=0.d0
-
-     
      loop2: do iter=1,maxiter
 
         !Human intervention at the beginning of every year after Phase I
@@ -244,8 +258,13 @@ program model
         !Only during the first month of every year of Phase II
         if(time-floor(time).gt.month) then
            add=0.d0
+           if(output) then
+              output=.false.
+              write(12,'(5(1x,es18.11))') time,cumI1Lt,cumI1Ht,cumI2Lt,cumI2Ht
+           endif
         else
            add=rate_as(index)
+           output=.true.
         endif
         r1h=rPD_stg1(index)
         r2h=rPD_stg2
@@ -323,6 +342,7 @@ program model
                 &    y(26),y(25),y(4),y(3),y(1),y(7),y(5),y(6),y(2),y(8),&
                 &    cumI1Lt,cumI1Ht,cumI2Lt,cumI2Ht
         endif
+
         if(time.ge.maxtime2) exit loop2
 
      enddo loop2
@@ -337,17 +357,17 @@ program model
      !If so, write the final state as steady state.
      !Otherwise discard it
      if (abs(fvar(11)/y(11)).le.tolerance.and.abs(fvar(14)/y(14)).le.tolerance)then
-        write(12,'(1x,i9,31(1x,es18.11))') modelnum,time,y(10),y(13),y(11),&
+        write(13,'(1x,i9,31(1x,es18.11))') modelnum,time,y(10),y(13),y(11),&
              &    y(12),y(9),y(16),y(17),y(14),y(15),y(18),y(19),y(21),y(22),&
              &    y(20),y(23),y(24),y(26),y(25),y(4),y(3),y(1),y(7),y(5),y(6),&
              &    y(2),y(8),cumI1Lt,cumI1Ht,cumI2Lt,cumI2Ht
      else
-        write(12,'(1x,i9,1x,a9)') modelnum,'Discarded'
+        write(13,'(1x,i9,1x,a9)') modelnum,'Discarded'
      endif
   
   enddo global
-  close(2)
   close(12)
+  close(13)
 
 
 end program model
