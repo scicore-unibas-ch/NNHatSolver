@@ -11,10 +11,11 @@ program model
   
   integer,parameter::maxnmodels=1            !Number of parameter sets
   integer,parameter::nvariables=26           !Number of evolved variables
-  
+  integer,parameter::nargs=6                 !Number of input arguments/model
+
   logical,parameter::rk2=.false.             !Runge-Kutta 2nd order
   logical,parameter::rk4=.false.             !Runge-Kutta 4th order
-  logical,parameter::debug=.false.           !Set debug mode
+  logical,parameter::debug=.true.           !Set debug mode
   !If debug mode is true, the code will generate evolution.d and conservation.d
   !As it writes to hard disk every iteration, debug is considerably slower.
 
@@ -46,9 +47,31 @@ program model
   double precision:: cumI1Lt,cumI1Ht,cumI2Lt,cumI2Ht
   double precision,dimension(ndata)::screened_as,pop_as,rate_as,screened_pd,pop_pd,slope,rPD_stg1
 
+  integer len,status
+  character starg*15
+  double precision,dimension(nargs)::arg
+  
   character number*5
   logical output
 
+
+  !Read model parameters from arguments
+
+  i=1
+  do
+     call get_command_argument(i,starg)
+     if (len(trim(starg)).eq.0) stop 'Missing argument'
+     read(starg,*) arg(i)
+     if(debug)print '(a9,1x,i2,a2,es18.11)','Argument ',i,': ',arg(i)
+     i=i+1
+     if(i.gt.nargs) exit
+  enddo
+  if(i.lt.nargs) stop 'Too few arguments'
+
+  !TO-DO
+  !Now conver arg(:) into the actual parameters that we need for the model
+
+  
   !After 100 yrs, r1l,r2l,r1h will change.
   !r1h is an annual vector/function (<20 yr)
   !r1l=r1h+raS (ras=value for 1st month and 0 for the rest 11 every year)
